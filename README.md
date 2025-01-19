@@ -1,7 +1,6 @@
 # Tusti Non-Transitive Dice Game 🎲
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A sophisticated implementation of a non-transitive dice game with provably fair random number generation using HMAC-based verification. This project demonstrates advanced concepts in cryptographic security, fair play mechanics, and object-oriented programming.
