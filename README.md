@@ -19,7 +19,7 @@ A sophisticated implementation of a non-transitive dice game with provably fair 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/non-transitive-dice-game.git
+git clone https://github.com/tusti101/Task3-DiceGame-Tusti.git
 cd non-transitive-dice-game
 ```
 
