@@ -9,6 +9,30 @@ from colorama import init, Fore, Style
 # Initialize colorama for cross-platform colored output
 init()
 
+class CommitmentScheme:
+    @staticmethod
+    def create_commitment(value: int, nonce: bytes = None) -> Tuple[bytes, bytes, str]:
+        """
+        Creates a commitment to a value using a nonce.
+        Returns (nonce, key, commitment_hash)
+        """
+        if nonce is None:
+            nonce = secrets.token_bytes(32)
+        key = secrets.token_bytes(32)
+        
+        # Combine value, nonce and key to create commitment
+        message = str(value).encode() + nonce + key
+        commitment = hashlib.sha3_256(message).hexdigest()
+        
+        return nonce, key, commitment
+    
+    @staticmethod
+    def verify_commitment(value: int, nonce: bytes, key: bytes, commitment: str) -> bool:
+        """Verifies that a revealed value matches its commitment"""
+        message = str(value).encode() + nonce + key
+        expected_commitment = hashlib.sha3_256(message).hexdigest()
+        return hmac.compare_digest(commitment, expected_commitment)
+
 class Dice:
     def __init__(self, values: List[int]):
         if len(values) != 6:
@@ -20,26 +44,16 @@ class Dice:
     def __str__(self):
         return ','.join(map(str, self.values))
 
-
 class FairRandomGenerator:
     @staticmethod
-    def generate_hmac_key() -> bytes:
-        """Generate a cryptographically secure random key of 256 bits"""
-        return secrets.token_bytes(32)  # 256 bits as required
-
-    @staticmethod
-    def generate_random_number(range_start: int, range_end: int) -> Tuple[int, bytes, str]:
+    def generate_random_value(range_start: int, range_end: int) -> Tuple[int, bytes, bytes, str]:
         """
-        Generate a provably fair random number using HMAC.
-        Returns the number, key used, and HMAC value.
+        Generate a random number with commitment scheme.
+        Returns (number, nonce, key, commitment)
         """
-        key = FairRandomGenerator.generate_hmac_key()
-        # Use secrets.randbelow for uniform distribution
         number = secrets.randbelow(range_end - range_start + 1) + range_start
-        # Use SHA3-256 for HMAC calculation
-        hmac_value = hmac.new(key, str(number).encode(), hashlib.sha3_256).hexdigest()
-        return number, key, hmac_value
-
+        nonce, key, commitment = CommitmentScheme.create_commitment(number)
+        return number, nonce, key, commitment
 
 class Game:
     def __init__(self, dice_list: List[Dice]):
@@ -49,16 +63,27 @@ class Game:
         self.used_dice_index = None
 
     def display_title(self):
-        print(f"\n{Fore.CYAN}=== Non-Transitive Dice Game ==={Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}Prove the fairness of random selection!{Style.RESET_ALL}\n")
+        print(f"\n{Fore.CYAN}=== Provably Fair Non-Transitive Dice Game ==={Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Each move uses a commitment scheme to ensure fairness!{Style.RESET_ALL}\n")
 
     def play(self):
         self.display_title()
-        print("Let's determine who makes the first move.")
-        first_player, key, hmac_value = self.determine_first_player()
-        print(f"I selected a random value in the range 0..1 (HMAC={hmac_value})")
+        print("Let's determine who makes the first move using a commitment scheme.")
+        
+        # First, create and show commitment
+        first_player, nonce, key, commitment = FairRandomGenerator.generate_random_value(0, 1)
+        print(f"I've committed to my choice. Commitment: {commitment}")
+        
+        # Get user's guess
         user_guess = self.get_user_guess()
-        print(f"My selection: {first_player} (KEY={key.hex()})")
+        
+        # Reveal and verify
+        print(f"Revealing my choice: {first_player}")
+        print(f"Verification data - Nonce: {nonce.hex()}, Key: {key.hex()}")
+        
+        if not CommitmentScheme.verify_commitment(first_player, nonce, key, commitment):
+            print(f"{Fore.RED}WARNING: Commitment verification failed! The game may be compromised.{Style.RESET_ALL}")
+            return
 
         if user_guess == first_player:
             print(f"{Fore.GREEN}You guessed correctly! You make the first move.{Style.RESET_ALL}")
@@ -71,18 +96,15 @@ class Game:
 
         self.determine_winner(user_roll, computer_roll)
 
-    def determine_first_player(self) -> Tuple[int, bytes, str]:
-        return FairRandomGenerator.generate_random_number(0, 1)
-
     def get_user_guess(self) -> int:
         print("\nTry to guess my selection:")
-        print("0 - I selected 0")
-        print("1 - I selected 1")
+        print("0 - You think I selected 0")
+        print("1 - You think I selected 1")
         print("? - help")
         print("x - exit")
         
         while True:
-            user_input = input(f"{Fore.YELLOW}Your selection: {Style.RESET_ALL}").strip().lower()
+            user_input = input(f"{Fore.YELLOW}Your guess: {Style.RESET_ALL}").strip().lower()
             if user_input == "0":
                 return 0
             elif user_input == "1":
@@ -103,12 +125,22 @@ class Game:
         self.used_dice_index = dice_index
         selected_dice = self.dice_list[dice_index]
         
-        # Generate provably fair random number for user's throw
-        roll, key, hmac_value = FairRandomGenerator.generate_random_number(0, 5)
-        selected_value = selected_dice.values[roll]
+        # First create and show commitment
+        roll, nonce, key, commitment = FairRandomGenerator.generate_random_value(0, 5)
+        print(f"\nI've committed to the roll. Commitment: {commitment}")
         
-        print(f"\nI selected a random value in the range 0..5 (HMAC={hmac_value})")
-        print(f"Generated value: {roll} (KEY={key.hex()})")
+        # Get user acknowledgment
+        input(f"{Fore.YELLOW}Press Enter to see the roll...{Style.RESET_ALL}")
+        
+        # Reveal and verify
+        print(f"Roll value: {roll}")
+        print(f"Verification data - Nonce: {nonce.hex()}, Key: {key.hex()}")
+        
+        if not CommitmentScheme.verify_commitment(roll, nonce, key, commitment):
+            print(f"{Fore.RED}WARNING: Commitment verification failed! The game may be compromised.{Style.RESET_ALL}")
+            return -1
+        
+        selected_value = selected_dice.values[roll]
         print(f"{Fore.GREEN}Your throw is {selected_value}{Style.RESET_ALL}")
         
         return selected_value
@@ -122,12 +154,22 @@ class Game:
         
         print(f"I choose dice {computer_choice + 1}: {selected_dice}")
         
-        # Generate provably fair random number for computer's throw
-        roll, key, hmac_value = FairRandomGenerator.generate_random_number(0, 5)
-        selected_value = selected_dice.values[roll]
+        # First create and show commitment
+        roll, nonce, key, commitment = FairRandomGenerator.generate_random_value(0, 5)
+        print(f"I've committed to the roll. Commitment: {commitment}")
         
-        print(f"I selected a random value in the range 0..5 (HMAC={hmac_value})")
-        print(f"Generated value: {roll} (KEY={key.hex()})")
+        # Get user acknowledgment
+        input(f"{Fore.YELLOW}Press Enter to see my roll...{Style.RESET_ALL}")
+        
+        # Reveal and verify
+        print(f"Roll value: {roll}")
+        print(f"Verification data - Nonce: {nonce.hex()}, Key: {key.hex()}")
+        
+        if not CommitmentScheme.verify_commitment(roll, nonce, key, commitment):
+            print(f"{Fore.RED}WARNING: Commitment verification failed! The game may be compromised.{Style.RESET_ALL}")
+            return -1
+        
+        selected_value = selected_dice.values[roll]
         print(f"{Fore.BLUE}My throw is {selected_value}{Style.RESET_ALL}")
         
         return selected_value
@@ -197,7 +239,6 @@ class Game:
         total = len(dice1.values) * len(dice2.values)
         return wins / total
 
-
 def parse_dice_configurations(args: List[str]) -> List[Dice]:
     """Parse command line arguments into dice configurations"""
     if len(args) < 3:
@@ -211,7 +252,6 @@ def parse_dice_configurations(args: List[str]) -> List[Dice]:
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid dice configuration '{arg}': {e}")
     return dice_list
-
 
 def main():
     if len(sys.argv) < 4:
@@ -243,7 +283,6 @@ def main():
     except Exception as e:
         print(f"{Fore.RED}An error occurred: {e}{Style.RESET_ALL}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
