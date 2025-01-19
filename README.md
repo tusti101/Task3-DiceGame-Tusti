@@ -115,7 +115,6 @@ python dice.py
 non-transitive-dice-game/
 ├── dice.py           # Main game implementation
 ├── requirements.txt  # Project dependencies
-├── LICENSE          # MIT license
 └── README.md        # This file
 ```
 
